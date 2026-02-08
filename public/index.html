@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Among Us - Multiplayer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #1e1e2e 0%, #2d1b3d 100%);
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        #game-container {
+            display: none;
+        }
+
+        #menu-container {
+            background: rgba(0, 0, 0, 0.7);
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            color: #ff4757;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .subtitle {
+            font-size: 0.9em;
+            color: #aaa;
+            margin-bottom: 30px;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            outline: none;
+        }
+
+        input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        input:focus {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #ff4757;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #ff6b7a;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 71, 87, 0.4);
+        }
+
+        .btn-secondary {
+            background: #5352ed;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #706fd3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(83, 82, 237, 0.4);
+        }
+
+        .divider {
+            margin: 20px 0;
+            color: #666;
+        }
+
+        #lobby-container {
+            display: none;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            max-width: 500px;
+            width: 90%;
+        }
+
+        .room-code {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            font-size: 1.5em;
+            font-weight: bold;
+            letter-spacing: 3px;
+        }
+
+        .players-list {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .player-item {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            margin: 5px 0;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 5px;
+        }
+
+        .player-color {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            margin-right: 10px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .player-name {
+            flex: 1;
+        }
+
+        .host-badge {
+            background: #ffa502;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 0.8em;
+        }
+
+        .error-message {
+            background: rgba(255, 71, 87, 0.2);
+            border: 1px solid #ff4757;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            display: none;
+        }
+
+        .info-text {
+            color: #aaa;
+            font-size: 0.9em;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <!-- Menu principale -->
+    <div id="menu-container">
+        <h1>🚀 AMONG US</h1>
+        <p class="subtitle">Gioco Multiplayer</p>
+        
+        <input type="text" id="nickname-input" placeholder="Inserisci il tuo nickname" maxlength="15">
+        
+        <button class="btn-primary" id="create-room-btn">Crea Stanza</button>
+        
+        <div class="divider">oppure</div>
+        
+        <input type="text" id="room-code-input" placeholder="Codice Stanza (es: ABC123)" maxlength="6">
+        <button class="btn-secondary" id="join-room-btn">Unisciti alla Stanza</button>
+        
+        <div class="error-message" id="error-message"></div>
+    </div>
+
+    <!-- Lobby -->
+    <div id="lobby-container">
+        <h2>🎮 Lobby</h2>
+        
+        <div class="room-code">
+            Codice Stanza: <span id="room-code-display"></span>
+        </div>
+        
+        <p class="info-text">Giocatori: <span id="player-count">0</span>/10</p>
+        
+        <div class="players-list" id="players-list"></div>
+        
+        <button class="btn-primary" id="start-game-btn" style="display: none;">Inizia Partita</button>
+        <p class="info-text" id="waiting-text">In attesa che l'host inizi la partita...</p>
+    </div>
+
+    <!-- Container del gioco Phaser -->
+    <div id="game-container"></div>
+
+    <!-- Phaser.js -->
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
+    
+    <!-- File del gioco -->
+    <script src="js/network.js"></script>
+    <script src="js/game.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>

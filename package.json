@@ -1,0 +1,18 @@
+{
+  "name": "among-us-multiplayer",
+  "version": "1.0.0",
+  "description": "Gioco multiplayer simile ad Among Us con Phaser.js e WebSocket",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "nodemon server/server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.14.2",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
