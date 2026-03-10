@@ -385,7 +385,7 @@ class GameScene extends Phaser.Scene {
         if (network && network.playerId && playerData.id === network.playerId) {
             this.localPlayer = player;
             this.cameras.main.startFollow(player, true, 0.1, 0.1);
-            this.cameras.main.setZoom(3);
+            this.cameras.main.setZoom(2.5);
             console.log(`Player locale creato a: ${x}, ${y}`);
         }
         
