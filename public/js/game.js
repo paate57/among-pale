@@ -358,15 +358,16 @@ class GameScene extends Phaser.Scene {
         player.setTint(colors[color] || 0xffffff);
         
         // Nome sopra la testa
-        const nameText = this.add.text(x, y - 30, nickname, {
-            fontSize: '14px',
-            fontFamily: 'Arial',
-            fill: '#ffffff',
-            backgroundColor: '#000000',
-            padding: { x: 6, y: 3 },
-            stroke: '#000000',
-            strokeThickness: 3
+        const nameText = this.add.text(Math.round(x), Math.round(y - 30), nickname, {
+            fontSize: '13px',
+            fontFamily: 'Fredoka, Arial',
+            color: '#ffffff',
+            stroke: '#ff0000',
+            strokeThickness: 1.5,
+            padding: { x: 3, y: 0 },
+            align: 'center'
         })
+        .setResolution(3)
         .setOrigin(0.5)
         .setDepth(2000);
         
