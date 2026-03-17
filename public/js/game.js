@@ -636,7 +636,7 @@ class GameScene extends Phaser.Scene {
 
         // Titolo del ruolo
         const roleText = this.add.text(width / 2, height / 2 - 80, this.role.toUpperCase(), {
-            font: 'bold 120px Arial',
+            font: 'bold 60px Arial',
             fill: this.role === 'impostor' ? '#ff0000' : '#00ff00',
             align: 'center',
             stroke: '#000000',

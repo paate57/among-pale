@@ -101,7 +101,7 @@ class Room {
     // Assign positions in a circle around the center of the map
     const centerX = 3072; // Center of the 6144x4096 map
     const centerY = 2048;
-    const radius = 200; // Larger radius for bigger map
+    const radius = 100; // Larger radius for bigger map
     const angleStep = (2 * Math.PI) / numPlayers;
     
     playersArray.forEach((player, index) => {
