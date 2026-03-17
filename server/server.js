@@ -98,6 +98,18 @@ class Room {
       [playersArray[i], playersArray[j]] = [playersArray[j], playersArray[i]];
     }
     
+    // Assign positions in a circle around the center
+    const centerX = 400;
+    const centerY = 300;
+    const radius = 100;
+    const angleStep = (2 * Math.PI) / numPlayers;
+    
+    playersArray.forEach((player, index) => {
+      const angle = index * angleStep;
+      player.x = centerX + Math.cos(angle) * radius;
+      player.y = centerY + Math.sin(angle) * radius;
+    });
+    
     // Assign impostors
     for (let i = 0; i < numImpostors; i++) {
       playersArray[i].role = 'impostor';
