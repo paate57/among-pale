@@ -112,6 +112,10 @@ class Network {
                 this.handlePlayerMoved(message);
                 break;
                 
+            case 'PLAYER_KILLED':
+                this.handlePlayerKilled(message);
+                break;
+                
             case 'GAME_STARTED':
                 this.handleGameStarted(message);
                 break;
@@ -218,6 +222,17 @@ class Network {
                 x: message.x,
                 y: message.y,
                 direction: message.direction
+            });
+        }
+    }
+
+    // Gestione uccisione giocatore
+    handlePlayerKilled(message) {
+        console.log(`💀 Giocatore ucciso: ${message.targetId}`);
+        
+        if (this.callbacks.onPlayerKilled) {
+            this.callbacks.onPlayerKilled({
+                targetId: message.targetId
             });
         }
     }
@@ -368,6 +383,19 @@ class Network {
         }
         
         return this.send(message);
+    }
+
+    // Uccidi un giocatore (solo impostori)
+    sendKill(targetId) {
+        if (!targetId) {
+            console.error('❌ ID target non valido');
+            return false;
+        }
+        
+        return this.send({
+            type: 'KILL_PLAYER',
+            targetId: targetId
+        });
     }
 
     // Avvia il gioco (solo host)

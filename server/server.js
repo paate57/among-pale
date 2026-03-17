@@ -98,10 +98,10 @@ class Room {
       [playersArray[i], playersArray[j]] = [playersArray[j], playersArray[i]];
     }
     
-    // Assign positions in a circle around the center
-    const centerX = 400;
-    const centerY = 300;
-    const radius = 100;
+    // Assign positions in a circle around the center of the map
+    const centerX = 3072; // Center of the 6144x4096 map
+    const centerY = 2048;
+    const radius = 200; // Larger radius for bigger map
     const angleStep = (2 * Math.PI) / numPlayers;
     
     playersArray.forEach((player, index) => {
@@ -245,15 +245,48 @@ wss.on('connection', (ws) => {
           if (roomCode && playerId) {
             const room = rooms.get(roomCode);
             if (room) {
-              room.updatePlayerPosition(playerId, message.x, message.y);
+              const player = room.players.get(playerId);
+              if (player && !player.isDead) {
+                room.updatePlayerPosition(playerId, message.x, message.y);
+                
+                // Invia aggiornamento a tutti gli altri giocatori
+                room.broadcast({
+                  type: 'PLAYER_MOVED',
+                  playerId: playerId,
+                  x: message.x,
+                  y: message.y
+                }, playerId);
+              }
+            }
+          }
+          break;
+
+        case 'KILL_PLAYER':
+          if (roomCode && playerId) {
+            const room = rooms.get(roomCode);
+            if (room && room.gameStarted) {
+              const killer = room.players.get(playerId);
+              const target = room.players.get(message.targetId);
               
-              // Invia aggiornamento a tutti gli altri giocatori
-              room.broadcast({
-                type: 'PLAYER_MOVED',
-                playerId: playerId,
-                x: message.x,
-                y: message.y
-              }, playerId);
+              if (killer && target && killer.role === 'impostor' && target.role === 'crewmate' && !target.isDead) {
+                // Controlla cooldown (10 secondi)
+                const now = Date.now();
+                if (!killer.lastKillTime || now - killer.lastKillTime > 10000) {
+                  // Marca il target come morto
+                  target.isDead = true;
+                  killer.lastKillTime = now;
+                  
+                  // Notifica tutti i giocatori
+                  room.broadcast({
+                    type: 'PLAYER_KILLED',
+                    targetId: message.targetId
+                  });
+                  
+                  console.log(`🗡️ ${killer.nickname} ha ucciso ${target.nickname}`);
+                } else {
+                  console.log(`⏰ ${killer.nickname} deve aspettare per uccidere di nuovo`);
+                }
+              }
             }
           }
           break;

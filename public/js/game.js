@@ -13,6 +13,8 @@ class GameScene extends Phaser.Scene {
         this.map = null;
         this.role = null;
         this.impostorNames = [];
+        this.killCooldown = 0; // Tempo rimanente del cooldown in secondi
+        this.killCooldownText = null;
     }
 
     preload() {
@@ -210,6 +212,14 @@ class GameScene extends Phaser.Scene {
                 this.scale.stopFullscreen();
             }
         });
+        
+        // Barra spaziatrice per uccidere (solo impostori)
+        this.killKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+        this.killKey.on('down', () => {
+            if (this.role === 'impostor') {
+                this.tryKill();
+            }
+        });
     }
 
     createNetworkPlayers() {
@@ -219,7 +229,7 @@ class GameScene extends Phaser.Scene {
             
             players.forEach(playerData => {
                 if (!this.players.has(playerData.id)) {
-                    this.createPlayer(playerData);
+                    this.createPlayer(playerData, this.role, this.impostorNames);
                 }
             });
         }
@@ -233,7 +243,7 @@ class GameScene extends Phaser.Scene {
             if (msg.players) {
                 msg.players.forEach(p => {
                     if (!this.players.has(p.id)) {
-                        this.createPlayer(p);
+                        this.createPlayer(p, this.role, this.impostorNames);
                     }
                 });
             }
@@ -270,6 +280,25 @@ class GameScene extends Phaser.Scene {
                 
                 if (player.nameText) {
                     player.nameText.setPosition(msg.x, msg.y - 30);
+                }
+            }
+        });
+        
+        network.on('onPlayerKilled', (msg) => {
+            const killedPlayer = this.players.get(msg.targetId);
+            if (killedPlayer) {
+                console.log('Giocatore ucciso:', msg.targetId);
+                // Nasconde il giocatore ucciso
+                killedPlayer.setVisible(false);
+                if (killedPlayer.nameText) {
+                    killedPlayer.nameText.setVisible(false);
+                }
+                // Rimuove dalla fisica
+                killedPlayer.body.enable = false;
+                
+                // Se siamo impostori e abbiamo ucciso qualcuno, assicuriamoci che il cooldown sia attivo
+                if (this.role === 'impostor') {
+                    this.killCooldown = Math.max(this.killCooldown, 10); // Assicura almeno 10 secondi
                 }
             }
         });
@@ -322,7 +351,7 @@ class GameScene extends Phaser.Scene {
         this.anims.create({ key: 'idle-up', frames: [{ key: 'player', frame: 12 }] });
     }
 
-    createPlayer(playerData) {
+    createPlayer(playerData, localRole, impostorNames) {
         if (!playerData || !playerData.id) return null;
         
         // CORREZIONE: Coordinate di spawn basate sulla dimensione effettiva della mappa
@@ -363,11 +392,16 @@ class GameScene extends Phaser.Scene {
         player.setTint(colors[color] || 0xffffff);
         
         // Nome sopra la testa
+        const isImpostor = impostorNames && impostorNames.some(imp => imp.id === playerData.id);
+        const isLocalImpostor = localRole === 'impostor';
+        const nameColor = (isLocalImpostor && (isImpostor || playerData.id === network.playerId)) ? '#ff0000' : '#ffffff';
+        const strokeColor = (isLocalImpostor && (isImpostor || playerData.id === network.playerId)) ? '#000000' : '#000000';
+        
         const nameText = this.add.text(Math.round(x), Math.round(y - 30), nickname, {
             fontSize: '13px',
             fontFamily: 'Fredoka, Arial',
-            color: '#ffffff',
-            stroke: '#ff0000',
+            color: nameColor,
+            stroke: strokeColor,
             strokeThickness: 1.5,
             padding: { x: 3, y: 0 },
             align: 'center'
@@ -397,6 +431,41 @@ class GameScene extends Phaser.Scene {
         return player;
     }
 
+    tryKill() {
+        if (!this.localPlayer || this.role !== 'impostor') return;
+        
+        // Controlla se è in cooldown
+        if (this.killCooldown > 0) return;
+        
+        const killRange = 50; // Distanza massima per uccidere (ridotta alla metà)
+        let closestCrewmate = null;
+        let closestDistance = killRange;
+        
+        this.players.forEach((player, id) => {
+            if (id !== network.playerId && player !== this.localPlayer) {
+                const distance = Phaser.Math.Distance.Between(
+                    this.localPlayer.x, this.localPlayer.y,
+                    player.x, player.y
+                );
+                
+                if (distance < closestDistance) {
+                    // Verifica se è un crewmate (non nella lista impostori)
+                    const isImpostor = this.impostorNames.some(imp => imp.id === id);
+                    if (!isImpostor) {
+                        closestCrewmate = id;
+                        closestDistance = distance;
+                    }
+                }
+            }
+        });
+        
+        if (closestCrewmate) {
+            network.sendKill(closestCrewmate);
+            // Imposta cooldown locale temporaneo (verrà aggiornato dal server)
+            this.killCooldown = 10;
+        }
+    }
+
     createDebugInfo() {
         // Crea testo FPS
         this.fpsText = this.add.text(10, 10, 'FPS: 0', {
@@ -421,6 +490,15 @@ class GameScene extends Phaser.Scene {
             backgroundColor: '#000000',
             padding: { x: 5, y: 3 }
         }).setScrollFactor(0).setDepth(3000);
+        
+        // Crea testo cooldown kill (visibile solo per impostori)
+        this.killCooldownText = this.add.text(10, 85, 'Kill: Ready', {
+            font: '14px Arial',
+            fill: '#00ff00',
+            backgroundColor: '#000000',
+            padding: { x: 5, y: 3 }
+        }).setScrollFactor(0).setDepth(3000);
+        this.killCooldownText.setVisible(false);
     }
 
     update(time, delta) {
@@ -435,6 +513,28 @@ class GameScene extends Phaser.Scene {
         
         if (this.playerText) {
             this.playerText.setText(`Players: ${this.players.size}`);
+        }
+        
+        // Aggiorna cooldown kill (visibile solo per impostori)
+        if (this.killCooldownText) {
+            this.killCooldownText.setVisible(this.role === 'impostor');
+            
+            if (this.role === 'impostor') {
+                if (this.killCooldown > 0) {
+                    this.killCooldown -= delta / 1000; // delta è in ms, converti in secondi
+                    if (this.killCooldown <= 0) {
+                        this.killCooldown = 0;
+                        this.killCooldownText.setText('Kill: Ready');
+                        this.killCooldownText.setFill('#00ff00');
+                    } else {
+                        this.killCooldownText.setText(`Kill: ${Math.ceil(this.killCooldown)}s`);
+                        this.killCooldownText.setFill('#ff0000');
+                    }
+                } else {
+                    this.killCooldownText.setText('Kill: Ready');
+                    this.killCooldownText.setFill('#00ff00');
+                }
+            }
         }
         
         if (!this.localPlayer) return;
