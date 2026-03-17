@@ -226,6 +226,10 @@ class Network {
     handleGameStarted(message) {
         console.log('🚀 Gioco iniziato!');
         
+        // Imposta il ruolo del giocatore locale
+        this.role = message.role;
+        this.impostorNames = message.impostorNames || [];
+        
         // Aggiorna tutti i giocatori con le posizioni iniziali
         if (message.players) {
             this.updatePlayers(message.players);
@@ -233,7 +237,9 @@ class Network {
         
         if (this.callbacks.onGameStarted) {
             this.callbacks.onGameStarted({
-                players: this.getAllPlayers()
+                players: this.getAllPlayers(),
+                role: this.role,
+                impostorNames: this.impostorNames
             });
         }
     }

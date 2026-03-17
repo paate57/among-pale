@@ -11,6 +11,8 @@ class GameScene extends Phaser.Scene {
         this.moveThrottle = 50;
         this.mapLayers = [];
         this.map = null;
+        this.role = null;
+        this.impostorNames = [];
     }
 
     preload() {
@@ -101,6 +103,9 @@ class GameScene extends Phaser.Scene {
         
         // Info di debug
         this.createDebugInfo();
+        
+        // Mostra schermata del ruolo
+        this.showRoleScreen();
     }
 
     setupPixelArt() {
@@ -495,5 +500,78 @@ class GameScene extends Phaser.Scene {
             }
             this.lastMoveTime = time;
         }
+    }
+
+    showRoleScreen() {
+        if (!this.role) return;
+
+        const width = this.cameras.main.width;
+        const height = this.cameras.main.height;
+
+        // Crea overlay container
+        const overlay = this.add.container(0, 0);
+        overlay.setScrollFactor(0);
+        overlay.setDepth(9999);
+
+        // Sfondo scuro
+        const background = this.make.graphics({
+            x: 0,
+            y: 0,
+            add: false
+        });
+        background.fillStyle(0x000000, 0.85);
+        background.fillRect(0, 0, width, height);
+
+        // Effetto rosso se impostor
+        if (this.role === 'impostor') {
+            const redOverlay = this.make.graphics({
+                x: 0,
+                y: 0,
+                add: false
+            });
+            redOverlay.fillStyle(0xff0000, 0.1);
+            redOverlay.fillRect(0, 0, width, height);
+            overlay.add(redOverlay);
+        }
+
+        // Titolo del ruolo
+        const roleText = this.add.text(width / 2, height / 2 - 80, this.role.toUpperCase(), {
+            font: 'bold 120px Arial',
+            fill: this.role === 'impostor' ? '#ff0000' : '#00ff00',
+            align: 'center',
+            stroke: '#000000',
+            strokeThickness: 4
+        }).setOrigin(0.5);
+
+        // Lista impostori se siamo impostor
+        if (this.role === 'impostor' && this.impostorNames.length > 0) {
+            const impostorListText = this.add.text(width / 2, height / 2 + 60, 
+                'Collaboratori:\n' + this.impostorNames.map(name => name.nickname).join('\n'), 
+                {
+                    font: 'bold 24px Arial',
+                    fill: '#ff0000',
+                    align: 'center',
+                    stroke: '#000000',
+                    strokeThickness: 2
+                }
+            ).setOrigin(0.5);
+            
+            overlay.add(impostorListText);
+        }
+
+        overlay.add(background);
+        overlay.add(roleText);
+
+        // Attendi un po' e poi nascondi gradualmente
+        this.time.delayedCall(3000, () => {
+            this.tweens.add({
+                targets: overlay,
+                alpha: 0,
+                duration: 500,
+                onComplete: () => {
+                    overlay.destroy();
+                }
+            });
+        });
     }
 }

@@ -83,6 +83,31 @@ class Room {
     return availableColors[Math.floor(Math.random() * availableColors.length)];
   }
 
+  assignRoles() {
+    const numPlayers = this.players.size;
+    let numImpostors = 1;
+    if (numPlayers >= 7) {
+      numImpostors = 2;
+    }
+
+    const playersArray = Array.from(this.players.values());
+    
+    // Shuffle the array
+    for (let i = playersArray.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [playersArray[i], playersArray[j]] = [playersArray[j], playersArray[i]];
+    }
+    
+    // Assign impostors
+    for (let i = 0; i < numImpostors; i++) {
+      playersArray[i].role = 'impostor';
+    }
+    // Assign crewmates
+    for (let i = numImpostors; i < playersArray.length; i++) {
+      playersArray[i].role = 'crewmate';
+    }
+  }
+
   updatePlayerPosition(playerId, x, y) {
     const player = this.players.get(playerId);
     if (player) {
@@ -108,6 +133,24 @@ class Room {
       color: p.color,
       isHost: p.isHost
     }));
+  }
+
+  getPlayerSpecificData(playerId) {
+    const player = this.players.get(playerId);
+    if (!player) return null;
+
+    const playersData = this.getPlayersData();
+    const result = { ...player, players: playersData };
+
+    if (player.role === 'impostor') {
+      // Invia i nomi degli altri impostori
+      const otherImpostors = Array.from(this.players.values())
+        .filter(p => p.role === 'impostor' && p.id !== playerId)
+        .map(p => ({ id: p.id, nickname: p.nickname }));
+      result.impostorNames = otherImpostors;
+    }
+
+    return result;
   }
 }
 
@@ -207,7 +250,7 @@ wss.on('connection', (ws) => {
           if (roomCode && playerId) {
             const room = rooms.get(roomCode);
             if (room && room.hostId === playerId) {
-              if (room.players.size < 0) { //test ma solitamente sempre più di 4
+              if (room.players.size < 4) {
                 ws.send(JSON.stringify({
                   type: 'ERROR',
                   message: 'Servono almeno 4 giocatori per iniziare'
@@ -216,15 +259,18 @@ wss.on('connection', (ws) => {
               }
               
               room.gameStarted = true;
+              room.assignRoles();
               
-              // Notifica tutti i giocatori
-              room.broadcast({
-                type: 'GAME_STARTED'
+              // Invia GAME_STARTED a ciascun giocatore con il suo ruolo e informazioni specifiche
+              room.players.forEach((player) => {
+                const playerData = room.getPlayerSpecificData(player.id);
+                player.ws.send(JSON.stringify({
+                  type: 'GAME_STARTED',
+                  role: player.role,
+                  players: room.getPlayersData(),
+                  impostorNames: playerData.impostorNames || []
+                }));
               });
-              
-              ws.send(JSON.stringify({
-                type: 'GAME_STARTED'
-              }));
               
               console.log(`Partita iniziata nella stanza ${roomCode}`);
             }

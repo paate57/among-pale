@@ -113,7 +113,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Inizializza il gioco Phaser
-    function initializeGame() {
+    function initializeGame(role, impostorNames) {
         lobbyContainer.style.display = 'none';
         gameContainer.style.display = 'block';
         
@@ -145,6 +145,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         game = new Phaser.Game(config);
+        
+        // Imposta il ruolo sulla scena dopo che è creata
+        game.events.once('ready', () => {
+            const scene = game.scene.getScene('GameScene');
+            if (scene) {
+                scene.role = role;
+                scene.impostorNames = impostorNames || [];
+                console.log('Ruolo impostato:', role);
+            }
+        });
         
         // Gestione resize
         window.addEventListener('resize', () => {
@@ -196,9 +206,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         // Game iniziato
-        network.on('onGameStarted', () => {
-            console.log('Gioco iniziato!');
-            initializeGame();
+        network.on('onGameStarted', (data) => {
+            console.log('Gioco iniziato!', data.role, data.impostorNames);
+            initializeGame(data.role, data.impostorNames);
         });
 
         // Errore
