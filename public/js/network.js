@@ -5,6 +5,7 @@ class Network {
         this.connected = false;
         this.playerId = null;
         this.roomCode = null;
+        this.nickname = null;
         this.players = new Map(); // Map<playerId, playerData>
         this.callbacks = {};
         this.reconnectAttempts = 0;
@@ -31,6 +32,12 @@ class Network {
                     this.connected = true;
                     this.reconnectAttempts = 0;
                     
+                    // Se abbiamo già una stanza, rejoin automaticamente
+                    if (this.roomCode && this.nickname) {
+                        console.log('🔄 Riconnessione automatica: rejoin stanza', this.roomCode);
+                        this.joinRoom(this.nickname, this.roomCode);
+                    }
+                    
                     // Notifica connessione riuscita
                     if (this.callbacks.onConnected) {
                         this.callbacks.onConnected();
@@ -52,8 +59,7 @@ class Network {
                 this.ws.onclose = (event) => {
                     console.log('🔌 Connessione chiusa:', event.code, event.reason);
                     this.connected = false;
-                    this.playerId = null;
-                    this.roomCode = null;
+                    this.playerId = null; // Resetta solo il playerId, mantieni roomCode e nickname per riconnessione
                     
                     // Tentativo di riconnessione
                     if (this.reconnectAttempts < this.maxReconnectAttempts) {
@@ -202,6 +208,7 @@ class Network {
 
     // Gestione movimento giocatore
     handlePlayerMoved(message) {
+        console.log(`📨 Ricevuto PLAYER_MOVED per ${message.playerId}: ${message.x}, ${message.y}`);
         const player = this.players.get(message.playerId);
         if (player) {
             // Aggiorna posizione
@@ -228,7 +235,7 @@ class Network {
 
     // Gestione uccisione giocatore
     handlePlayerKilled(message) {
-        console.log(`💀 Giocatore ucciso: ${message.targetId}`);
+        console.log(`💀 Ricevuto PLAYER_KILLED per ${message.targetId}`);
         
         if (this.callbacks.onPlayerKilled) {
             this.callbacks.onPlayerKilled({
@@ -355,12 +362,15 @@ class Network {
             return false;
         }
         
+        this.nickname = nickname.trim();
+        this.roomCode = roomCode.trim().toUpperCase();
+        
         const color = this.getRandomColor();
         
         return this.send({
             type: 'JOIN_ROOM',
-            nickname: nickname.trim(),
-            roomCode: roomCode.trim().toUpperCase(),
+            nickname: this.nickname,
+            roomCode: this.roomCode,
             color: color
         });
     }
@@ -382,6 +392,7 @@ class Network {
             message.direction = direction;
         }
         
+        console.log(`📍 Invio PLAYER_MOVE: ${x}, ${y}`);
         return this.send(message);
     }
 
@@ -392,6 +403,7 @@ class Network {
             return false;
         }
         
+        console.log(`🗡️ Invio KILL_PLAYER per target ${targetId}`);
         return this.send({
             type: 'KILL_PLAYER',
             targetId: targetId

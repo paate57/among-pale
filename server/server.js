@@ -242,6 +242,7 @@ wss.on('connection', (ws) => {
           break;
 
         case 'PLAYER_MOVE':
+          console.log(`📍 Ricevuto PLAYER_MOVE da ${playerId}: ${message.x}, ${message.y}`);
           if (roomCode && playerId) {
             const room = rooms.get(roomCode);
             if (room) {
@@ -256,12 +257,14 @@ wss.on('connection', (ws) => {
                   x: message.x,
                   y: message.y
                 }, playerId);
+                console.log(`📤 Broadcast PLAYER_MOVED per ${playerId}`);
               }
             }
           }
           break;
 
         case 'KILL_PLAYER':
+          console.log(`🗡️ Ricevuto KILL_PLAYER da ${playerId} per target ${message.targetId}`);
           if (roomCode && playerId) {
             const room = rooms.get(roomCode);
             if (room && room.gameStarted) {
