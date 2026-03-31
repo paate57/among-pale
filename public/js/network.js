@@ -144,6 +144,10 @@ class Network {
                 this.handleGameEnd(message);
                 break;
                 
+            case 'TASK_PROGRESS':
+                this.handleTaskProgress(message);
+                break;
+                
             case 'ERROR':
                 this.handleError(message);
                 break;
@@ -269,7 +273,17 @@ class Network {
             });
         }
     }
-
+    // Gestione progresso task
+    handleTaskProgress(message) {
+        console.log(`📊 Progresso task: ${message.totalCompleted}/${message.totalRequired}`);
+        
+        if (this.callbacks.onTaskProgress) {
+            this.callbacks.onTaskProgress({
+                totalCompleted: message.totalCompleted,
+                totalRequired: message.totalRequired
+            });
+        }
+    }
     // Gestione inizio gioco
     handleGameStarted(message) {
         console.log('🚀 Gioco iniziato!');

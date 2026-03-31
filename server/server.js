@@ -57,7 +57,8 @@ class Room {
       isHost: playerId === this.hostId,
       role: null,
       isDead: false,
-      taskCompleted: false
+      tasksCompleted: 0,
+      totalTasks: 5
     });
 
     return true;
@@ -193,16 +194,17 @@ class Room {
 
   checkTaskWin() {
     const aliveCrewmates = Array.from(this.players.values()).filter(p => p.role === 'crewmate' && !p.isDead);
-    const completedTasks = aliveCrewmates.filter(p => p.taskCompleted);
+    const totalTasksRequired = aliveCrewmates.length * 5; // 5 task per crewmate
+    const totalTasksCompleted = aliveCrewmates.reduce((sum, p) => sum + p.tasksCompleted, 0);
 
-    if (aliveCrewmates.length > 0 && completedTasks.length === aliveCrewmates.length) {
-      // Tutti i crewmate hanno completato il task
+    if (aliveCrewmates.length > 0 && totalTasksCompleted >= totalTasksRequired) {
+      // Tutti i crewmate hanno completato tutti i task
       this.broadcast({
         type: 'GAME_END',
         winner: 'crewmate',
         players: this.getPlayersData()
       });
-      console.log(`🏆 Partita finita! Crewmate vincono completando tutti i task`);
+      console.log(`🏆 Partita finita! Crewmate vincono completando tutti i task (${totalTasksCompleted}/${totalTasksRequired})`);
     }
   }
 }
@@ -323,9 +325,9 @@ wss.on('connection', (ws) => {
               const target = room.players.get(message.targetId);
               
               if (killer && target && killer.role === 'impostor' && target.role === 'crewmate' && !target.isDead) {
-                // Controlla cooldown (10 secondi)
+                // Controlla cooldown (5 secondi)
                 const now = Date.now();
-                if (!killer.lastKillTime || now - killer.lastKillTime > 10000) {
+                if (!killer.lastKillTime || now - killer.lastKillTime > 5000) {
                   // Marca il target come morto
                   target.isDead = true;
                   killer.lastKillTime = now;
@@ -333,7 +335,8 @@ wss.on('connection', (ws) => {
                   // Notifica tutti i giocatori
                   room.broadcast({
                     type: 'PLAYER_KILLED',
-                    targetId: message.targetId
+                    targetId: message.targetId,
+                    killerId: playerId
                   });
                   
                   console.log(`🗡️ ${killer.nickname} ha ucciso ${target.nickname}`);
@@ -363,6 +366,15 @@ wss.on('connection', (ws) => {
               room.gameStarted = true;
               room.assignRoles();
               
+              // Broadcast progresso task iniziale
+              const aliveCrewmates = Array.from(room.players.values()).filter(p => p.role === 'crewmate' && !p.isDead);
+              const totalRequired = aliveCrewmates.length * 5;
+              room.broadcast({
+                type: 'TASK_PROGRESS',
+                totalCompleted: 0,
+                totalRequired: totalRequired
+              });
+              
               // Invia GAME_STARTED a ciascun giocatore con il suo ruolo e informazioni specifiche
               room.players.forEach((player) => {
                 const playerData = room.getPlayerSpecificData(player.id);
@@ -384,13 +396,23 @@ wss.on('connection', (ws) => {
             const room = rooms.get(roomCode);
             if (room && room.gameStarted) {
               const player = room.players.get(playerId);
-              if (player && player.role === 'crewmate' && !player.isDead) {
-                // Marca task completato per questo giocatore
-                player.taskCompleted = true;
+              if (player && player.role === 'crewmate' && !player.isDead && player.tasksCompleted < player.totalTasks) {
+                // Incrementa task completato per questo giocatore
+                player.tasksCompleted++;
                 
-                console.log(`✅ ${player.nickname} ha completato il task`);
+                // Calcola progresso totale
+                const aliveCrewmates = Array.from(room.players.values()).filter(p => p.role === 'crewmate' && !p.isDead);
+                const totalCompleted = aliveCrewmates.reduce((sum, p) => sum + p.tasksCompleted, 0);
+                const totalRequired = aliveCrewmates.length * 5;
                 
-                // Controlla se tutti i crewmate hanno completato il task
+                // Broadcast progresso task totale
+                room.broadcast({
+                  type: 'TASK_PROGRESS',
+                  totalCompleted: totalCompleted,
+                  totalRequired: totalRequired
+                });
+                
+                // Controlla se tutti i crewmate hanno completato tutti i task
                 room.checkTaskWin();
               }
             }

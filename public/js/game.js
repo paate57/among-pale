@@ -13,6 +13,8 @@ class GameScene extends Phaser.Scene {
         this.map = null;
         this.role = null;
         this.impostorNames = [];
+        this.totalCompleted = 0;
+        this.totalRequired = 0;
         this.killCooldown = 0; // Tempo rimanente del cooldown in secondi
         this.killCooldownText = null;
     }
@@ -105,6 +107,9 @@ class GameScene extends Phaser.Scene {
         
         // Crea task
         this.createTasks();
+        
+        // Crea barra progresso task
+        this.createTaskProgressBar();
         
         // Info di debug
         this.createDebugInfo();
@@ -327,11 +332,19 @@ class GameScene extends Phaser.Scene {
                 // Rimuove dalla fisica
                 killedPlayer.body.enable = false;
                 
-                // Se siamo impostori e abbiamo ucciso qualcuno, assicuriamoci che il cooldown sia attivo
-                if (this.role === 'impostor') {
-                    this.killCooldown = Math.max(this.killCooldown, 10); // Assicura almeno 10 secondi
+                // Se siamo l'impostore che ha ucciso, attiva cooldown
+                if (this.role === 'impostor' && msg.killerId === network.playerId) {
+                    this.killCooldown = 5;
                 }
             }
+        });
+        
+        network.on('onTaskProgress', (msg) => {
+            console.log('Task progress update:', msg);
+            // Aggiorna progresso totale
+            this.totalCompleted = msg.totalCompleted;
+            this.totalRequired = msg.totalRequired;
+            this.updateTaskProgress();
         });
     }
 
@@ -356,10 +369,6 @@ class GameScene extends Phaser.Scene {
                 
                 // Chiudi la scena del task
                 this.scene.stop('TaskCables');
-                
-                // Nasconde il task
-                this.taskObject.setVisible(false);
-                if (this.taskText) this.taskText.setVisible(false);
                 
                 // Invia al server
                 if (network && network.sendTaskCompleted) {
@@ -477,6 +486,12 @@ class GameScene extends Phaser.Scene {
         
         player.nameText = nameText;
         
+        // Aggiungi dati task e ruolo
+        player.tasksCompleted = playerData.tasksCompleted || 0;
+        player.totalTasks = playerData.totalTasks || 5;
+        player.role = playerData.role;
+        player.isDead = playerData.isDead || false;
+        
         // Collisioni con layer
         this.mapLayers.forEach(layer => {
             this.physics.add.collider(player, layer);
@@ -564,6 +579,33 @@ class GameScene extends Phaser.Scene {
             padding: { x: 5, y: 3 }
         }).setScrollFactor(0).setDepth(3000);
         this.killCooldownText.setVisible(false);
+    }
+
+    createTaskProgressBar() {
+        const width = this.cameras.main.width;
+        
+        // Sfondo barra
+        this.progressBarBg = this.add.graphics();
+        this.progressBarBg.fillStyle(0x000000, 0.8);
+        this.progressBarBg.fillRect(width / 2 - 200, 10, 400, 20);
+        this.progressBarBg.setScrollFactor(0).setDepth(2999);
+        
+        // Barra progresso
+        this.progressBar = this.add.graphics();
+        this.progressBar.fillStyle(0x00ff00, 1);
+        this.progressBar.fillRect(width / 2 - 195, 15, 0, 10); // Inizia vuota
+        this.progressBar.setScrollFactor(0).setDepth(3000);
+        
+        // Testo progresso
+        this.progressText = this.add.text(width / 2, 20, 'Task: 0/0', {
+            font: '14px Arial',
+            fill: '#ffffff'
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(3000);
+        
+        // Nasconde inizialmente
+        this.progressBarBg.setVisible(false);
+        this.progressBar.setVisible(false);
+        this.progressText.setVisible(false);
     }
 
     update(time, delta) {
@@ -735,9 +777,42 @@ class GameScene extends Phaser.Scene {
                 duration: 500,
                 onComplete: () => {
                     overlay.destroy();
+                    // Mostra barra progresso se crewmate
+                    this.showTaskProgressBarIfCrewmate();
                 }
             });
         });
+    }
+
+    showTaskProgressBarIfCrewmate() {
+        if (this.role === 'crewmate') {
+            this.progressBarBg.setVisible(true);
+            this.progressBar.setVisible(true);
+            this.progressText.setVisible(true);
+            this.updateTaskProgress();
+        }
+    }
+
+    updateTaskProgress() {
+        if (this.role !== 'crewmate') return;
+        
+        // Usa i valori ricevuti dal server
+        const totalCompleted = this.totalCompleted;
+        const totalRequired = this.totalRequired;
+        
+        // Aggiorna barra
+        const width = this.cameras.main.width;
+        const progressRatio = totalRequired > 0 ? totalCompleted / totalRequired : 0;
+        const barWidth = Math.max(0, Math.min(390, progressRatio * 390)); // Max 390px
+        
+        this.progressBar.clear();
+        this.progressBar.fillStyle(0x00ff00, 1);
+        this.progressBar.fillRect(width / 2 - 195, 15, barWidth, 10);
+        
+        // Aggiorna testo
+        this.progressText.setText(`Task: ${totalCompleted}/${totalRequired}`);
+        
+        console.log(`📊 Progresso task aggiornato: ${totalCompleted}/${totalRequired} (${Math.round(progressRatio * 100)}%)`);
     }
 }
 
