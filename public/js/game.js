@@ -103,6 +103,9 @@ class GameScene extends Phaser.Scene {
         // Crea animazioni
         this.createAnimations();
         
+        // Crea task
+        this.createTasks();
+        
         // Info di debug
         this.createDebugInfo();
         
@@ -164,6 +167,26 @@ class GameScene extends Phaser.Scene {
     this.cameras.main.setBounds(0, 0, this.map.widthInPixels, this.map.heightInPixels);
 }
 
+    createTasks() {
+        // Crea un task semplice: un rettangolo giallo al centro della mappa
+        const centerX = this.map ? this.map.widthInPixels / 2 : 480;
+        const centerY = this.map ? this.map.heightInPixels / 2 : 320;
+        
+        this.taskObject = this.add.rectangle(centerX, centerY, 32, 32, 0xffff00);
+        this.taskObject.setStrokeStyle(2, 0x000000);
+        this.taskObject.setDepth(800);
+        
+        // Testo sopra il task
+        this.taskText = this.add.text(centerX, centerY - 40, 'TASK: Premi E', {
+            font: '14px Arial',
+            fill: '#ffffff',
+            backgroundColor: '#000000',
+            padding: { x: 5, y: 3 }
+        }).setOrigin(0.5);
+        
+        console.log('Task creato a:', centerX, centerY);
+    }
+
     createFallbackMap() {
         console.log('Creazione mappa di fallback...');
         
@@ -218,6 +241,14 @@ class GameScene extends Phaser.Scene {
         this.killKey.on('down', () => {
             if (this.role === 'impostor') {
                 this.tryKill();
+            }
+        });
+        
+        // Tasto E per interagire con task (solo crewmate)
+        this.interactKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
+        this.interactKey.on('down', () => {
+            if (this.role === 'crewmate') {
+                this.tryInteract();
             }
         });
     }
@@ -302,6 +333,40 @@ class GameScene extends Phaser.Scene {
                 }
             }
         });
+    }
+
+    tryInteract() {
+        if (!this.localPlayer || !this.taskObject) return;
+        
+        // Controlla distanza dal task
+        const distance = Phaser.Math.Distance.Between(
+            this.localPlayer.x, this.localPlayer.y,
+            this.taskObject.x, this.taskObject.y
+        );
+        
+        if (distance < 50) { // Raggio di interazione
+            console.log('Avvio task di cablaggio!');
+            
+            // Lancia la scena del task
+            this.scene.launch('TaskCables');
+            
+            // Ascolta il completamento
+            this.scene.get('TaskCables').events.once('complete', () => {
+                console.log('Task completato!');
+                
+                // Chiudi la scena del task
+                this.scene.stop('TaskCables');
+                
+                // Nasconde il task
+                this.taskObject.setVisible(false);
+                if (this.taskText) this.taskText.setVisible(false);
+                
+                // Invia al server
+                if (network && network.sendTaskCompleted) {
+                    network.sendTaskCompleted();
+                }
+            });
+        }
     }
 
     createAnimations() {
@@ -674,4 +739,261 @@ class GameScene extends Phaser.Scene {
             });
         });
     }
+}
+
+// ========================
+// TASK 2: NETWORK CABLING
+// ========================
+class TaskCables extends Phaser.Scene {
+    constructor() { 
+        super({ key: "TaskCables" }); 
+    }
+    
+    create() {
+        this.cameras.main.fadeIn(300);
+        
+        // Simple background
+        this.add.rectangle(400, 300, 800, 600, 0x111827);
+        
+        // Title
+        const titleBg = this.add.rectangle(400, 50, 500, 50, 0x1e3a8a)
+            .setStrokeStyle(2, 0x3b82f6)
+            .setDepth(1);
+        
+        const title = this.add.text(400, 50, "CABLAGGIO DI RETE", {
+            fontSize: "28px",
+            fill: "#3b82f6",
+            fontStyle: "bold"
+        }).setOrigin(0.5).setDepth(1);
+        
+        // Instructions
+        this.add.text(400, 95, 
+            "Collega ogni porta alla corrispondente dello stesso colore",
+            {
+                fontSize: "15px",
+                fill: "#ffffff"
+            }
+        ).setOrigin(0.5).setDepth(1);
+        
+        this.selected = null;
+        this.completed = 0;
+        this.wrongConnections = 0;
+        this.maxWrong = 3;
+        
+        // Colors
+        const colors = [0xef4444, 0x22c55e, 0x3b82f6, 0xf59e0b, 0x8b5cf6, 0x06b6d4];
+        const labels = ["A", "B", "C", "D", "E", "F"];
+        const rightOrder = Phaser.Utils.Array.Shuffle([...labels]);
+        
+        this.leftNodes = [];
+        this.rightNodes = [];
+        
+        // Counter
+        this.counter = this.add.text(400, 125, 
+            `Collegamenti: ${this.completed}/${labels.length} | Errori: ${this.wrongConnections}/${this.maxWrong}`,
+            {
+                fontSize: "16px",
+                fill: "#fbbf24",
+                fontStyle: "bold"
+            }
+        ).setOrigin(0.5).setDepth(1);
+        
+        // Left panel - depth 1
+        const leftPanel = this.add.rectangle(200, 340, 180, 400, 0x1e293b)
+            .setStrokeStyle(2, 0x4b5563)
+            .setDepth(1);
+        
+        this.add.text(200, 165, "ORIGINE", {
+            fontSize: "18px",
+            fill: "#3b82f6",
+            fontStyle: "bold"
+        }).setOrigin(0.5).setDepth(1);
+        
+        // Right panel - depth 1
+        const rightPanel = this.add.rectangle(600, 340, 180, 400, 0x1e293b)
+            .setStrokeStyle(2, 0x4b5563)
+            .setDepth(1);
+        
+        this.add.text(600, 165, "DESTINAZIONE", {
+            fontSize: "18px",
+            fill: "#3b82f6",
+            fontStyle: "bold"
+        }).setOrigin(0.5).setDepth(1);
+        
+        // Graphics for cables - NOW AT DEPTH 5 (in front of panels)
+        this.fixedGraphics = this.add.graphics().setDepth(5);
+        this.tempGraphics = this.add.graphics().setDepth(5);
+        
+        // Create nodes - depth 10 (on top of everything)
+        labels.forEach((label, i) => {
+            const color = colors[i];
+            
+            // Left node
+            const leftX = 200;
+            const leftY = 210 + i * 60;
+            
+            const leftNode = this.add.circle(leftX, leftY, 18, color)
+                .setInteractive({ cursor: 'pointer' })
+                .setStrokeStyle(3, 0xffffff)
+                .setDepth(10);
+            
+            this.add.text(leftX, leftY - 32, label, {
+                fontSize: "18px",
+                fill: "#ffffff",
+                fontStyle: "bold"
+            }).setOrigin(0.5).setDepth(10);
+            
+            leftNode.label = label;
+            leftNode.color = color;
+            this.leftNodes.push(leftNode);
+            
+            // Right node
+            const rightIndex = rightOrder.indexOf(label);
+            const rightX = 600;
+            const rightY = 210 + rightIndex * 60;
+            
+            const rightNode = this.add.circle(rightX, rightY, 18, color)
+                .setInteractive({ cursor: 'pointer' })
+                .setStrokeStyle(3, 0xffffff)
+                .setDepth(10);
+            
+            this.add.text(rightX, rightY - 32, label, {
+                fontSize: "18px",
+                fill: "#ffffff",
+                fontStyle: "bold"
+            }).setOrigin(0.5).setDepth(10);
+            
+            rightNode.label = label;
+            rightNode.color = color;
+            this.rightNodes.push(rightNode);
+        });
+        
+        // Input handlers
+        this.input.on('pointerdown', (pointer, objects) => {
+            if (!objects[0]) return;
+            
+            const obj = objects[0];
+            
+            if (this.leftNodes.includes(obj)) {
+                if (this.selected) {
+                    this.selected.setStrokeStyle(3, 0xffffff);
+                }
+                this.selected = obj;
+                obj.setStrokeStyle(4, 0xfbbf24);
+            }
+            else if (this.rightNodes.includes(obj) && this.selected) {
+                if (obj.label === this.selected.label) {
+                    // Correct
+                    this.drawLine(this.selected, obj);
+                    this.selected.disabled = true;
+                    obj.disabled = true;
+                    this.selected.setStrokeStyle(3, 0x22c55e);
+                    obj.setStrokeStyle(3, 0x22c55e);
+                    this.selected.disableInteractive();
+                    obj.disableInteractive();
+                    
+                    this.completed++;
+                    this.updateCounter();
+                    
+                    if (this.completed === labels.length) {
+                        this.time.delayedCall(500, () => {
+                            this.completeTask();
+                        });
+                    }
+                } else {
+                    // Wrong
+                    this.wrongConnections++;
+                    this.updateCounter();
+                    
+                    shake(this, obj, 10);
+                    obj.setStrokeStyle(4, 0xef4444);
+                    
+                    if (this.wrongConnections >= this.maxWrong) {
+                        this.resetTask();
+                        return;
+                    }
+                    
+                    this.time.delayedCall(700, () => {
+                        obj.setStrokeStyle(3, 0xffffff);
+                    });
+                }
+                
+                if (this.selected) {
+                    this.selected.setStrokeStyle(3, 0xffffff);
+                    this.selected = null;
+                }
+                this.tempGraphics.clear();
+            }
+        });
+        
+        // Temporary line
+        this.input.on('pointermove', (pointer) => {
+            this.tempGraphics.clear();
+            
+            if (this.selected && !this.selected.disabled) {
+                this.tempGraphics.lineStyle(5, this.selected.color, 0.7);
+                this.tempGraphics.beginPath();
+                this.tempGraphics.moveTo(this.selected.x, this.selected.y);
+                this.tempGraphics.lineTo(pointer.x, pointer.y);
+                this.tempGraphics.strokePath();
+            }
+        });
+    }
+    
+    updateCounter() {
+        this.counter.setText(
+            `Collegamenti: ${this.completed}/${6} | Errori: ${this.wrongConnections}/${this.maxWrong}`
+        );
+    }
+    
+    drawLine(a, b) {
+        this.fixedGraphics.lineStyle(6, a.color, 0.9);
+        this.fixedGraphics.beginPath();
+        this.fixedGraphics.moveTo(a.x, a.y);
+        this.fixedGraphics.lineTo(b.x, b.y);
+        this.fixedGraphics.strokePath();
+    }
+    
+    resetTask() {
+        this.time.delayedCall(300, () => {
+            this.scene.restart();
+        });
+    }
+    
+    completeTask() {
+        const overlay = this.add.rectangle(400, 300, 800, 600, 0x000000, 0.6).setDepth(20);
+        
+        const panel = this.add.rectangle(400, 300, 400, 120, 0x166534)
+            .setStrokeStyle(3, 0x22c55e)
+            .setDepth(20);
+        
+        this.add.text(400, 300, "✓ RETE CONNESSA", {
+            fontSize: "24px",
+            fill: "#22c55e",
+            fontStyle: "bold"
+        }).setOrigin(0.5).setDepth(20);
+        
+        this.time.delayedCall(1200, () => {
+            this.events.emit("complete");
+        });
+    }
+}
+
+// Funzione di utilità per shake
+function shake(scene, obj, intensity = 5) {
+    const originalX = obj.x;
+    const originalY = obj.y;
+    
+    scene.tweens.add({
+        targets: obj,
+        x: originalX + intensity,
+        duration: 50,
+        yoyo: true,
+        repeat: 3,
+        ease: 'Power2',
+        onComplete: () => {
+            obj.x = originalX;
+            obj.y = originalY;
+        }
+    });
 }

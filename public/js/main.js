@@ -132,7 +132,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     debug: false
                 }
             },
-            scene: GameScene,
+            scene: [GameScene, TaskCables],
             scale: {
                 mode: Phaser.Scale.RESIZE,
                 autoCenter: Phaser.Scale.CENTER_BOTH
@@ -162,6 +162,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 game.scale.resize(window.innerWidth, window.innerHeight);
             }
         });
+    }
+
+    // Mostra schermata fine partita
+    function showGameEnd(winner) {
+        // Rimuovi il gioco Phaser
+        if (game) {
+            game.destroy(true);
+            game = null;
+        }
+        
+        // Mostra menu con messaggio vittoria/sconfitta
+        gameContainer.style.display = 'none';
+        menuContainer.style.display = 'block';
+        
+        const message = winner === 'crewmate' ? '🎉 I Crewmate hanno vinto!' : '😈 Gli Impostori hanno vinto!';
+        showError(message);
+        
+        // Resetta il gioco
+        currentRoomCode = '';
+        isHost = false;
     }
 
     // Connessione al server WebSocket
@@ -209,6 +229,12 @@ document.addEventListener('DOMContentLoaded', () => {
         network.on('onGameStarted', (data) => {
             console.log('Gioco iniziato!', data.role, data.impostorNames);
             initializeGame(data.role, data.impostorNames);
+        });
+
+        // Game finito
+        network.on('onGameEnd', (data) => {
+            console.log('Gioco finito!', data.winner);
+            showGameEnd(data.winner);
         });
 
         // Errore

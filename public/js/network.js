@@ -95,6 +95,16 @@ class Network {
         });
     }
 
+    // Invia completamento task
+    sendTaskCompleted() {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({
+                type: 'TASK_COMPLETED'
+            }));
+            console.log('📤 Task completato inviato');
+        }
+    }
+
     // Gestione dei messaggi dal server
     handleMessage(message) {
         switch (message.type) {
@@ -128,6 +138,10 @@ class Network {
                 
             case 'PLAYER_INFO':
                 this.handlePlayerInfo(message);
+                break;
+                
+            case 'GAME_END':
+                this.handleGameEnd(message);
                 break;
                 
             case 'ERROR':
@@ -240,6 +254,18 @@ class Network {
         if (this.callbacks.onPlayerKilled) {
             this.callbacks.onPlayerKilled({
                 targetId: message.targetId
+            });
+        }
+    }
+
+    // Gestione fine partita
+    handleGameEnd(message) {
+        console.log(`🏆 Partita finita! Vincitori: ${message.winner}`);
+        
+        if (this.callbacks.onGameEnd) {
+            this.callbacks.onGameEnd({
+                winner: message.winner,
+                players: message.players
             });
         }
     }

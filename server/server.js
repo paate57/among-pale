@@ -54,7 +54,10 @@ class Room {
       y: 300,
       color: this.getRandomColor(),
       ws: ws,
-      isHost: playerId === this.hostId
+      isHost: playerId === this.hostId,
+      role: null,
+      isDead: false,
+      taskCompleted: false
     });
 
     return true;
@@ -163,6 +166,44 @@ class Room {
     }
 
     return result;
+  }
+
+  checkGameEnd() {
+    const alivePlayers = Array.from(this.players.values()).filter(p => !p.isDead);
+    const aliveCrewmates = alivePlayers.filter(p => p.role === 'crewmate');
+    const aliveImpostors = alivePlayers.filter(p => p.role === 'impostor');
+
+    let winner = null;
+    if (aliveCrewmates.length === 0) {
+      winner = 'impostor';
+    } else if (aliveImpostors.length === 0) {
+      winner = 'crewmate';
+    }
+
+    if (winner) {
+      // Notifica tutti i giocatori della fine partita
+      this.broadcast({
+        type: 'GAME_END',
+        winner: winner,
+        players: this.getPlayersData()
+      });
+      console.log(`🏆 Partita finita! Vincitori: ${winner}`);
+    }
+  }
+
+  checkTaskWin() {
+    const aliveCrewmates = Array.from(this.players.values()).filter(p => p.role === 'crewmate' && !p.isDead);
+    const completedTasks = aliveCrewmates.filter(p => p.taskCompleted);
+
+    if (aliveCrewmates.length > 0 && completedTasks.length === aliveCrewmates.length) {
+      // Tutti i crewmate hanno completato il task
+      this.broadcast({
+        type: 'GAME_END',
+        winner: 'crewmate',
+        players: this.getPlayersData()
+      });
+      console.log(`🏆 Partita finita! Crewmate vincono completando tutti i task`);
+    }
   }
 }
 
@@ -286,6 +327,9 @@ wss.on('connection', (ws) => {
                   });
                   
                   console.log(`🗡️ ${killer.nickname} ha ucciso ${target.nickname}`);
+                  
+                  // Controlla se la partita è finita
+                  room.checkGameEnd();
                 } else {
                   console.log(`⏰ ${killer.nickname} deve aspettare per uccidere di nuovo`);
                 }
@@ -321,6 +365,24 @@ wss.on('connection', (ws) => {
               });
               
               console.log(`Partita iniziata nella stanza ${roomCode}`);
+            }
+          }
+          break;
+
+        case 'TASK_COMPLETED':
+          if (roomCode && playerId) {
+            const room = rooms.get(roomCode);
+            if (room && room.gameStarted) {
+              const player = room.players.get(playerId);
+              if (player && player.role === 'crewmate' && !player.isDead) {
+                // Marca task completato per questo giocatore
+                player.taskCompleted = true;
+                
+                console.log(`✅ ${player.nickname} ha completato il task`);
+                
+                // Controlla se tutti i crewmate hanno completato il task
+                room.checkTaskWin();
+              }
             }
           }
           break;
