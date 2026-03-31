@@ -251,6 +251,16 @@ wss.on('connection', (ws) => {
             break;
           }
           
+          // Controlla se il nickname è già in uso
+          const existingPlayer = Array.from(room.players.values()).find(p => p.nickname === message.nickname);
+          if (existingPlayer) {
+            ws.send(JSON.stringify({
+              type: 'ERROR',
+              message: 'Questo nickname è già in uso nella stanza. Scegli un nome diverso.'
+            }));
+            break;
+          }
+          
           if (room.gameStarted) {
             ws.send(JSON.stringify({
               type: 'ERROR',

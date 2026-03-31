@@ -752,22 +752,45 @@ class TaskCables extends Phaser.Scene {
     create() {
         this.cameras.main.fadeIn(300);
         
+        // Get center coordinates
+        const centerX = this.cameras.main.centerX;
+        const centerY = this.cameras.main.centerY;
+        
         // Simple background
-        this.add.rectangle(400, 300, 800, 600, 0x111827);
+        this.add.rectangle(centerX, centerY, 800, 600, 0x111827);
+        
+        // Exit button (X) in top-right corner
+        const exitBtn = this.add.text(centerX + 380, centerY - 280, '✕', {
+            fontSize: '32px',
+            fill: '#ef4444',
+            fontStyle: 'bold'
+        }).setInteractive({ cursor: 'pointer' }).setDepth(50);
+        
+        exitBtn.on('pointerdown', () => {
+            this.scene.stop('TaskCables');
+        });
+        
+        exitBtn.on('pointerover', () => {
+            exitBtn.setFill('#dc2626');
+        });
+        
+        exitBtn.on('pointerout', () => {
+            exitBtn.setFill('#ef4444');
+        });
         
         // Title
-        const titleBg = this.add.rectangle(400, 50, 500, 50, 0x1e3a8a)
+        const titleBg = this.add.rectangle(centerX, centerY - 250, 500, 50, 0x1e3a8a)
             .setStrokeStyle(2, 0x3b82f6)
             .setDepth(1);
         
-        const title = this.add.text(400, 50, "CABLAGGIO DI RETE", {
+        const title = this.add.text(centerX, centerY - 250, "CABLAGGIO DI RETE", {
             fontSize: "28px",
             fill: "#3b82f6",
             fontStyle: "bold"
         }).setOrigin(0.5).setDepth(1);
         
         // Instructions
-        this.add.text(400, 95, 
+        this.add.text(centerX, centerY - 205, 
             "Collega ogni porta alla corrispondente dello stesso colore",
             {
                 fontSize: "15px",
@@ -789,7 +812,7 @@ class TaskCables extends Phaser.Scene {
         this.rightNodes = [];
         
         // Counter
-        this.counter = this.add.text(400, 125, 
+        this.counter = this.add.text(centerX, centerY - 175, 
             `Collegamenti: ${this.completed}/${labels.length} | Errori: ${this.wrongConnections}/${this.maxWrong}`,
             {
                 fontSize: "16px",
@@ -799,22 +822,22 @@ class TaskCables extends Phaser.Scene {
         ).setOrigin(0.5).setDepth(1);
         
         // Left panel - depth 1
-        const leftPanel = this.add.rectangle(200, 340, 180, 400, 0x1e293b)
+        const leftPanel = this.add.rectangle(centerX - 200, centerY + 40, 180, 400, 0x1e293b)
             .setStrokeStyle(2, 0x4b5563)
             .setDepth(1);
         
-        this.add.text(200, 165, "ORIGINE", {
+        this.add.text(centerX - 200, centerY - 135, "ORIGINE", {
             fontSize: "18px",
             fill: "#3b82f6",
             fontStyle: "bold"
         }).setOrigin(0.5).setDepth(1);
         
         // Right panel - depth 1
-        const rightPanel = this.add.rectangle(600, 340, 180, 400, 0x1e293b)
+        const rightPanel = this.add.rectangle(centerX + 200, centerY + 40, 180, 400, 0x1e293b)
             .setStrokeStyle(2, 0x4b5563)
             .setDepth(1);
         
-        this.add.text(600, 165, "DESTINAZIONE", {
+        this.add.text(centerX + 200, centerY - 135, "DESTINAZIONE", {
             fontSize: "18px",
             fill: "#3b82f6",
             fontStyle: "bold"
@@ -829,8 +852,8 @@ class TaskCables extends Phaser.Scene {
             const color = colors[i];
             
             // Left node
-            const leftX = 200;
-            const leftY = 210 + i * 60;
+            const leftX = centerX - 200;
+            const leftY = centerY - 90 + i * 60;
             
             const leftNode = this.add.circle(leftX, leftY, 18, color)
                 .setInteractive({ cursor: 'pointer' })
@@ -849,8 +872,8 @@ class TaskCables extends Phaser.Scene {
             
             // Right node
             const rightIndex = rightOrder.indexOf(label);
-            const rightX = 600;
-            const rightY = 210 + rightIndex * 60;
+            const rightX = centerX + 200;
+            const rightY = centerY - 90 + rightIndex * 60;
             
             const rightNode = this.add.circle(rightX, rightY, 18, color)
                 .setInteractive({ cursor: 'pointer' })
@@ -961,13 +984,16 @@ class TaskCables extends Phaser.Scene {
     }
     
     completeTask() {
-        const overlay = this.add.rectangle(400, 300, 800, 600, 0x000000, 0.6).setDepth(20);
+        const centerX = this.cameras.main.centerX;
+        const centerY = this.cameras.main.centerY;
         
-        const panel = this.add.rectangle(400, 300, 400, 120, 0x166534)
+        const overlay = this.add.rectangle(centerX, centerY, 800, 600, 0x000000, 0.6).setDepth(20);
+        
+        const panel = this.add.rectangle(centerX, centerY, 400, 120, 0x166534)
             .setStrokeStyle(3, 0x22c55e)
             .setDepth(20);
         
-        this.add.text(400, 300, "✓ RETE CONNESSA", {
+        this.add.text(centerX, centerY, "✓ RETE CONNESSA", {
             fontSize: "24px",
             fill: "#22c55e",
             fontStyle: "bold"
