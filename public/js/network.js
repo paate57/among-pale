@@ -50,6 +50,9 @@ class Network {
                     try {
                         const message = JSON.parse(event.data);
                         console.log('📨 Messaggio ricevuto:', message.type, message);
+                        if (message.type === 'GAME_END') {
+                            console.log(`⚠️⚠️⚠️ GAME_END RICEVUTO! Winner: ${message.winner} ⚠️⚠️⚠️`);
+                        }
                         this.handleMessage(message);
                     } catch (error) {
                         console.error('❌ Errore nel parsing del messaggio:', error, event.data);
@@ -146,6 +149,22 @@ class Network {
                 
             case 'TASK_PROGRESS':
                 this.handleTaskProgress(message);
+                break;
+
+            case 'EMERGENCY_MEETING':
+                this.handleEmergencyMeeting(message);
+                break;
+
+            case 'MEETING_CHAT':
+                this.handleMeetingChat(message);
+                break;
+
+            case 'MEETING_VOTE':
+                this.handleMeetingVote(message);
+                break;
+
+            case 'MEETING_RESULT':
+                this.handleMeetingResult(message);
                 break;
                 
             case 'ERROR':
@@ -264,13 +283,17 @@ class Network {
 
     // Gestione fine partita
     handleGameEnd(message) {
-        console.log(`🏆 Partita finita! Vincitori: ${message.winner}`);
+        console.log(`🏆 handleGameEnd chiamato! Winner: ${message.winner}`);
+        console.log(`📋 Callback registrati:`, Object.keys(this.callbacks));
         
         if (this.callbacks.onGameEnd) {
+            console.log(`✅ Callback onGameEnd trovato, lo chiamo...`);
             this.callbacks.onGameEnd({
                 winner: message.winner,
                 players: message.players
             });
+        } else {
+            console.error('❌ Callback onGameEnd NON trovato!');
         }
     }
     // Gestione progresso task
@@ -284,6 +307,88 @@ class Network {
             });
         }
     }
+
+    // Gestione emergency meeting
+    handleEmergencyMeeting(message) {
+        console.log('📢 Emergency meeting received:', message);
+        if (this.callbacks.onEmergencyMeeting) {
+            this.callbacks.onEmergencyMeeting({
+                callerId: message.callerId,
+                timestamp: message.timestamp,
+                x: message.x,
+                y: message.y
+            });
+        }
+    }
+
+    // Gestione chat meeting
+    handleMeetingChat(message) {
+        console.log('💬 Meeting chat message received:', message);
+        if (this.callbacks.onMeetingChat) {
+            this.callbacks.onMeetingChat({
+                sender: message.sender,
+                text: message.text,
+                timestamp: message.timestamp
+            });
+        }
+    }
+
+    // Gestione voto meeting
+    handleMeetingVote(message) {
+        console.log('🗳️ Meeting vote message received:', message);
+        if (this.callbacks.onMeetingVote) {
+            this.callbacks.onMeetingVote({
+                voterId: message.voterId,
+                voterName: message.voterName,
+                targetId: message.targetId,
+                targetName: message.targetName,
+                timestamp: message.timestamp
+            });
+        }
+    }
+
+    // Gestione risultato meeting
+    handleMeetingResult(message) {
+        console.log('📊 Meeting result received:', message);
+        if (this.callbacks.onMeetingResult) {
+            this.callbacks.onMeetingResult({
+                result: message.result,
+                targetId: message.targetId,
+                targetName: message.targetName,
+                targetRole: message.targetRole,
+                message: message.message
+            });
+        }
+    }
+
+    // Invia voto meeting
+    sendMeetingVote(targetId) {
+        console.log('📤 sendMeetingVote', targetId, 'wsState=', this.ws ? this.ws.readyState : 'no-ws');
+
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({
+                type: 'VOTE',
+                targetId: targetId
+            }));
+            console.log('📤 VOTO inviato:', targetId);
+            return true;
+        }
+
+        console.error('❌ sendMeetingVote fallito: WebSocket non aperto');
+        return false;
+    }
+
+    // Invia chat meeting
+    sendMeetingChat(text) {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({
+                type: 'MEETING_CHAT',
+                text: text
+            }));
+            console.log('📤 MEETING_CHAT inviato:', text);
+        }
+    }
+
     // Gestione inizio gioco
     handleGameStarted(message) {
         console.log('🚀 Gioco iniziato!');
@@ -291,6 +396,8 @@ class Network {
         // Imposta il ruolo del giocatore locale
         this.role = message.role;
         this.impostorNames = message.impostorNames || [];
+        this.tasksCompleted = message.tasksCompleted || 0;
+        this.totalTasks = message.totalTasks || 5;
         
         // Aggiorna tutti i giocatori con le posizioni iniziali
         if (message.players) {
@@ -447,6 +554,14 @@ class Network {
         return this.send({
             type: 'KILL_PLAYER',
             targetId: targetId
+        });
+    }
+
+    // Invia richiesta riunione emergenza
+    sendEmergency() {
+        console.log('⛔ Invio EMERGENCY_MEETING');
+        return this.send({
+            type: 'EMERGENCY_MEETING'
         });
     }
 

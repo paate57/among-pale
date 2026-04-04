@@ -132,7 +132,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     debug: false
                 }
             },
-            scene: [GameScene, TaskCables],
+            scene: [GameScene, TaskCables, TaskCode, TaskPC, TaskUpload, TaskDownload, TaskFirewall, TaskDatabase, TaskSecurity, TaskEmail, TaskBackup, TaskPrinter, TaskWifi],
             scale: {
                 mode: Phaser.Scale.RESIZE,
                 autoCenter: Phaser.Scale.CENTER_BOTH
@@ -146,42 +146,18 @@ document.addEventListener('DOMContentLoaded', () => {
         
         game = new Phaser.Game(config);
         
-        // Imposta il ruolo sulla scena dopo che è creata
-        game.events.once('ready', () => {
+        // Assegna subito ruolo alla scena GameScene, anche se la scena non è ancora pronta.
+        const assignRole = () => {
             const scene = game.scene.getScene('GameScene');
             if (scene) {
-                scene.role = role;
-                scene.impostorNames = impostorNames || [];
-                console.log('Ruolo impostato:', role);
+                scene.setRole(role, impostorNames || []);
+            } else {
+                console.warn('GameScene non disponibile al momento, ritento in 50ms');
+                setTimeout(assignRole, 50);
             }
-        });
-        
-        // Gestione resize
-        window.addEventListener('resize', () => {
-            if (game && game.scale) {
-                game.scale.resize(window.innerWidth, window.innerHeight);
-            }
-        });
-    }
+        };
 
-    // Mostra schermata fine partita
-    function showGameEnd(winner) {
-        // Rimuovi il gioco Phaser
-        if (game) {
-            game.destroy(true);
-            game = null;
-        }
-        
-        // Mostra menu con messaggio vittoria/sconfitta
-        gameContainer.style.display = 'none';
-        menuContainer.style.display = 'block';
-        
-        const message = winner === 'crewmate' ? '🎉 I Crewmate hanno vinto!' : '😈 Gli Impostori hanno vinto!';
-        showError(message);
-        
-        // Resetta il gioco
-        currentRoomCode = '';
-        isHost = false;
+        assignRole();
     }
 
     // Connessione al server WebSocket
@@ -231,11 +207,19 @@ document.addEventListener('DOMContentLoaded', () => {
             initializeGame(data.role, data.impostorNames);
         });
 
-        // Game finito
-        network.on('onGameEnd', (data) => {
-            console.log('Gioco finito!', data.winner);
-            showGameEnd(data.winner);
+        // Progresso task
+        network.on('onTaskProgress', (data) => {
+            console.log('Progresso task:', data.totalCompleted, '/', data.totalRequired);
+            // Aggiorna la scena GameScene se esiste
+            if (game) {
+                const gameScene = game.scene.getScene('GameScene');
+                if (gameScene) {
+                    gameScene.updateTaskProgress(data.totalCompleted, data.totalRequired);
+                }
+            }
         });
+
+        // Nota: onGameEnd è gestito nel DOMContentLoaded per assicurare che la scena sia pronta
 
         // Errore
         network.on('onError', (errorMessage) => {
@@ -283,6 +267,33 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     startGameBtn.addEventListener('click', startGame);
+
+    // Variabile per salvare il winner se arriva prima che GameScene sia pronto
+    let pendingGameEnd = null;
+
+    // Funzione per mostrare il game end quando la scena è disponibile
+    const showGameEndWhenReady = () => {
+        if (game && pendingGameEnd) {
+            const gameScene = game.scene.getScene('GameScene');
+            if (gameScene) {
+                console.log('🎬 Mostrando game end per winner:', pendingGameEnd.winner);
+                gameScene.showGameEnd(pendingGameEnd.winner);
+                pendingGameEnd = null;
+            } else {
+                // Riprova tra 100ms
+                setTimeout(showGameEndWhenReady, 100);
+            }
+        }
+    };
+
+    // Game finito
+    network.on('onGameEnd', (data) => {
+        console.log('🏆 Gioco finito!', data.winner);
+        pendingGameEnd = data;
+        
+        // Attenta che la scena sia pronta
+        showGameEndWhenReady();
+    });
 
     // Inizializza connessione al caricamento della pagina
     connectToServer();

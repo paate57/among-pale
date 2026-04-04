@@ -40,6 +40,79 @@ class Room {
     this.players = new Map();
     this.maxPlayers = 10;
     this.gameStarted = false;
+    this.meetingActive = false;
+    this.votes = new Map();
+    this.meetingTimeoutId = null;
+  }
+
+  startEmergencyMeeting() {
+    this.meetingActive = true;
+    this.votes.clear();
+
+    // Timeout per concludere automaticamente il meeting dopo 20 secondi
+    if (this.meetingTimeoutId) {
+      clearTimeout(this.meetingTimeoutId);
+    }
+    this.meetingTimeoutId = setTimeout(() => {
+      if (this.meetingActive) {
+        this.finishEmergencyMeeting();
+      }
+    }, 20000);
+  }
+
+  finishEmergencyMeeting() {
+    this.meetingActive = false;
+    if (this.meetingTimeoutId) {
+      clearTimeout(this.meetingTimeoutId);
+      this.meetingTimeoutId = null;
+    }
+
+    const alivePlayers = Array.from(this.players.values()).filter(p => !p.isDead);
+    const voteCounts = new Map();
+
+    for (const [voterId, targetId] of this.votes) {
+      if (!voteCounts.has(targetId)) voteCounts.set(targetId, 0);
+      voteCounts.set(targetId, voteCounts.get(targetId) + 1);
+    }
+
+    let selectedId = null;
+    let maxVotes = 0;
+
+    voteCounts.forEach((count, playerId) => {
+      if (count > maxVotes) {
+        maxVotes = count;
+        selectedId = playerId;
+      } else if (count === maxVotes) {
+        selectedId = null; // tie
+      }
+    });
+
+    if (selectedId === 'skip' || !selectedId || maxVotes === 0) {
+      // Skip or tie or no votes means no ejection
+      this.broadcast({ type: 'MEETING_RESULT', result: 'no_eject', message: 'Pareggio o nessun voto: nessuno verrà espulso' });
+      return;
+    }
+
+    const target = this.players.get(selectedId);
+    if (!target || target.isDead) {
+      this.broadcast({ type: 'MEETING_RESULT', result: 'no_eject', message: 'Nessun target valido per l’espulsione' });
+      return;
+    }
+
+    target.isDead = true;
+
+    this.broadcast({ type: 'MEETING_RESULT', result: 'ejected', targetId: selectedId, targetName: target.nickname, targetRole: target.role });
+
+    // Notifica uccisione a tutti come se fosse killed
+    this.broadcast({ type: 'PLAYER_KILLED', targetId: selectedId, killerId: null });
+
+    if (target.role === 'impostor') {
+      this.broadcast({ type: 'GAME_END', winner: 'crewmate', players: this.getPlayersData() });
+      this.gameStarted = false;
+      return;
+    }
+
+    this.checkGameEnd();
   }
 
   addPlayer(playerId, nickname, ws) {
@@ -174,21 +247,32 @@ class Room {
     const aliveCrewmates = alivePlayers.filter(p => p.role === 'crewmate');
     const aliveImpostors = alivePlayers.filter(p => p.role === 'impostor');
 
+    console.log(`📊 Controllo fine partita - Crewmate vivi: ${aliveCrewmates.length}, Impostori vivi: ${aliveImpostors.length}`);
+
     let winner = null;
     if (aliveCrewmates.length === 0) {
       winner = 'impostor';
     } else if (aliveImpostors.length === 0) {
       winner = 'crewmate';
+    } else if (aliveImpostors.length >= aliveCrewmates.length) {
+      // Se gli impostori sono pari o maggiori dei crewmate, vincono gli impostori.
+      // Questo copre il caso 1 impostore + 1 crewmate e regole simili di parità.
+      winner = 'impostor';
+      console.log('📊 Fine partita per parità: impostori >= crewmate, impostori vincono');
     }
 
     if (winner) {
       // Notifica tutti i giocatori della fine partita
+      console.log(`🏆 GAME_END inviato! Vincitori: ${winner}`);
       this.broadcast({
         type: 'GAME_END',
         winner: winner,
         players: this.getPlayersData()
       });
       console.log(`🏆 Partita finita! Vincitori: ${winner}`);
+      
+      // Interrompi il gioco per evitare ulteriori messaggi
+      this.gameStarted = false;
     }
   }
 
@@ -382,7 +466,9 @@ wss.on('connection', (ws) => {
                   type: 'GAME_STARTED',
                   role: player.role,
                   players: room.getPlayersData(),
-                  impostorNames: playerData.impostorNames || []
+                  impostorNames: playerData.impostorNames || [],
+                  tasksCompleted: player.tasksCompleted,
+                  totalTasks: player.totalTasks
                 }));
               });
               
@@ -415,6 +501,108 @@ wss.on('connection', (ws) => {
                 // Controlla se tutti i crewmate hanno completato tutti i task
                 room.checkTaskWin();
               }
+            }
+          }
+          break;
+
+        case 'EMERGENCY_MEETING':
+          if (roomCode && playerId) {
+            const room = rooms.get(roomCode);
+            if (room && room.gameStarted) {
+              room.startEmergencyMeeting();
+
+              // Broadcast a tutti i giocatori che la riunione è stata chiamata
+              room.broadcast({
+                type: 'EMERGENCY_MEETING',
+                callerId: playerId,
+                timestamp: Date.now(),
+                x: 3072,
+                y: 2048
+              });
+
+              // Imposta tutti i giocatori in modalità riunione (facoltativo)
+              room.players.forEach((player) => {
+                player.x = 3072;
+                player.y = 2048;
+              });
+
+              console.log(`🚨 Emergency meeting chiamata da ${playerId} nella stanza ${roomCode}`);
+            }
+          }
+          break;
+
+        case 'VOTE':
+          if (roomCode && playerId) {
+            const room = rooms.get(roomCode);
+            if (room && room.gameStarted && room.meetingActive && typeof message.targetId === 'string') {
+              const voter = room.players.get(playerId);
+
+              if (!voter || voter.isDead) {
+                break;
+              }
+
+              let target = null;
+              if (message.targetId !== 'skip') {
+                target = room.players.get(message.targetId);
+                if (!target || target.isDead) {
+                  break;
+                }
+              }
+
+              room.votes.set(playerId, message.targetId);
+
+              const voteTargetName = message.targetId === 'skip' ? 'SKIP' : target.nickname;
+
+              // Invia conferma del voto solo al giocatore che ha votato.
+              if (voter.ws && voter.ws.readyState === WebSocket.OPEN) {
+                voter.ws.send(JSON.stringify({
+                  type: 'MEETING_VOTE',
+                  voterId: playerId,
+                  voterName: voter.nickname,
+                  targetId: message.targetId,
+                  targetName: voteTargetName,
+                  timestamp: Date.now()
+                }));
+              }
+
+              console.log(`🗳️ [${roomCode}] ${voter.nickname} ha votato ${voteTargetName}`);
+
+              const alivePlayers = Array.from(room.players.values()).filter(p => !p.isDead);
+              const voteCounts = new Map();
+              room.votes.forEach((votedTargetId) => {
+                if (!voteCounts.has(votedTargetId)) voteCounts.set(votedTargetId, 0);
+                voteCounts.set(votedTargetId, voteCounts.get(votedTargetId) + 1);
+              });
+
+              let hasMajority = false;
+              voteCounts.forEach((count) => {
+                if (count > alivePlayers.length / 2) {
+                  hasMajority = true;
+                }
+              });
+
+              if (hasMajority || room.votes.size >= alivePlayers.length) {
+                room.finishEmergencyMeeting();
+              }
+            }
+          }
+          break;
+
+        case 'MEETING_CHAT':
+          if (roomCode && playerId) {
+            const room = rooms.get(roomCode);
+            if (room && room.gameStarted && typeof message.text === 'string' && message.text.trim().length > 0) {
+              const player = room.players.get(playerId);
+              const sender = player ? player.nickname : 'Anonimo';
+
+              room.broadcast({
+                type: 'MEETING_CHAT',
+                sender: sender,
+                text: message.text.trim(),
+                timestamp: Date.now()
+              });
+
+              console.log(`💬 [${roomCode}] ${sender}: ${message.text.trim()}`);
             }
           }
           break;
